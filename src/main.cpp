@@ -49,6 +49,7 @@ int main() {
     map_waypoints_dx.push_back(d_x);
     map_waypoints_dy.push_back(d_y);
   }
+  static int iteration = 0;
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy]
@@ -62,6 +63,8 @@ int main() {
       auto s = hasData(data);
 
       if (s != "") {
+        iteration++;
+        bool debug = 1;
         auto j = json::parse(s);
         
         string event = j[0].get<string>();
@@ -97,6 +100,38 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+
+          // Print debug information
+          if( debug )
+          {
+            std::cout << std::endl; 
+            std::cout << "Iteration:" << iteration << std::endl; 
+            std::cout << "CarX:" << car_x << std::endl; 
+            std::cout << "CarY:" << car_y << std::endl; 
+            std::cout << "CarS:" << car_s << std::endl; 
+            std::cout << "CarD:" << car_d << std::endl; 
+            std::cout << "CarYAW:" << car_yaw << std::endl; 
+            std::cout << "CarSPEED:" << car_speed << std::endl; 
+          }
+
+          for(int s=0;s< sensor_fusion.size();s++)
+          {
+            // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
+            double other_id = sensor_fusion[s][0];
+            double other_x = sensor_fusion[s][1];
+            double other_y = sensor_fusion[s][2];
+            double other_vx = sensor_fusion[s][3];
+            double other_vy = sensor_fusion[s][4];
+            double other_s = sensor_fusion[s][5];
+            double other_d = sensor_fusion[s][6];
+
+            double dx = car_x - other_x;
+            double dy = car_y - other_y;
+            double dist = sqrt(dx*dx+dy*dy);
+
+            std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
+            
+          }
 
 
           msgJson["next_x"] = next_x_vals;
