@@ -63,10 +63,13 @@ int main() {
       auto s = hasData(data);
 
       if (s != "") {
+        // set variables
         iteration++;
         bool debug = 1;
+        double velocity_max = 49.5;
+
+        // parse string
         auto j = json::parse(s);
-        
         string event = j[0].get<string>();
         
         if (event == "telemetry") {
@@ -83,6 +86,8 @@ int main() {
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
+          int prev_size = previous_path_x.size();
+
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
@@ -95,6 +100,7 @@ int main() {
 
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+          double lane = 1;
 
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
@@ -114,25 +120,98 @@ int main() {
             std::cout << "CarSPEED:" << car_speed << std::endl; 
           }
 
-          for(int s=0;s< sensor_fusion.size();s++)
-          {
-            // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
-            double other_id = sensor_fusion[s][0];
-            double other_x = sensor_fusion[s][1];
-            double other_y = sensor_fusion[s][2];
-            double other_vx = sensor_fusion[s][3];
-            double other_vy = sensor_fusion[s][4];
-            double other_s = sensor_fusion[s][5];
-            double other_d = sensor_fusion[s][6];
+          vector<double> pts_x;
+          vector<double> pts_y;
+          double ref_x = car_x;
+          double ref_y = car_yaw;
+          double ref_yaw = deg2rad(car_yaw);
 
-            double dx = car_x - other_x;
-            double dy = car_y - other_y;
-            double dist = sqrt(dx*dx+dy*dy);
+          if ( prev_size < 2){
+            // Processing first 2 points; 
 
-            std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
+            // Making first points tangent to the car
+            double prev_car_x = car_x - cos(car_yaw);
+            double prev_car_y = car_y - sin(car_yaw);
+
+            pts_x.push_back(prev_car_x);
+            pts_x.push_back(car_x);
+
+            pts_y.push_back(prev_car_x);
+            pts_y.push_back(prev_car_y);
+          }else{
+            // Processing consecutive points...
+
+            // Use 2 end points of last path to define new reference point
+            ref_x = previous_path_x[prev_size-1];
+            ref_y = previous_path_y[prev_size-1];
+
+            double ref_x_prev = previous_path_x[prev_size-2];
+            double ref_y_prev = previous_path_y[prev_size-2];
+            ref_yaw = atan2(ref_y-ref_y_prev, ref_x = ref_x_prev);
+
+            // Make first two points tangent to last path
+            pts_x.push_back(ref_x_prev);
+            pts_x.push_back(ref_x);
+
+            pts_y.push_back(ref_y_prev);
+            pts_y.push_back(ref_y);
+
+            // Waypoints parameters
+            int num_waypoints  = 3;
+            double waypoint_increment = 30;
+            double lane_size = 4;
+
+            // Prepare watpoints in Frenet coordinates 
+            for(int w=0;w<num_waypoints;++w)
+            {
+              vector<double> waypoint = getXY(car_s+(w+1)*waypoint_increment,(lane_size/2+lane_size*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+              pts_x.push_back(waypoint[0]);
+              pts_y.push_back(waypoint[1]);
+            }
+
+            // shift & rotate coordinates
+            for(int p=0; p<pts_x.size();++p)
+            {
+              double shift_x = pts_x[p]-ref_x;
+              double shift_y = pts_y[p]-ref_y;
+
+              pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
+              pts_y[p] = shift_x*sin(-ref_yaw) - shift_y*cos(-ref_yaw);
+
+              if(debug)
+              {
+                std::cout << "pts_x[..]" << pts_x[p]  << std::endl << "pts_y[..]" << pts_y[p] << std::endl;
+              }
+            }
+
+            //
             
+
+            // Sensor fusion data
+            for(int s=0;s<sensor_fusion.size();s++)
+            {
+              // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
+              double other_id = sensor_fusion[s][0];
+              double other_x = sensor_fusion[s][1];
+              double other_y = sensor_fusion[s][2];
+              double other_vx = sensor_fusion[s][3];
+              double other_vy = sensor_fusion[s][4];
+              double other_s = sensor_fusion[s][5];
+              double other_d = sensor_fusion[s][6];
+
+              double dx = car_x - other_x;
+              double dy = car_y - other_y;
+              double dist = sqrt(dx*dx+dy*dy);
+
+              if(debug)
+              {
+                std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
+              }
+            }
           }
 
+          next_x_vals = pts_x;
+          next_y_vals = pts_y;
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
