@@ -70,12 +70,13 @@ int main() {
         int num_waypoints  = 3;
         double waypoint_increment = 30;
         double lane_size = 4;
-        double max_acc = 9; // m/s^2
+        double max_acc = 6; // m/s^2
 
         double speed_conv_ratio = 2.24;
         double velocity_max = 49.5/speed_conv_ratio;
         double lane = 1; 
         double frame_time = 0.02;
+        double lane_clearance_dist = 30;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
 
@@ -152,10 +153,12 @@ int main() {
 
          // Sensor fusion data
           bool slow_down = false;
-          bool clear_lane[3];
+          double lane_clearance_front[3];
+          double lane_clearance_back[3];
           for(int i=0;i<3;++i)
           {
-            clear_lane[i] = true;
+            lane_clearance_front[i] = 100;
+            lane_clearance_back[i] = 100;
           }
           for(int s=0;s<sensor_fusion.size();s++)
           {
@@ -170,7 +173,8 @@ int main() {
 
             double dx = car_x - other_x;
             double dy = car_y - other_y;
-            double dist = sqrt(dx*dx+dy*dy);
+            double dist_front = other_s-car_s;
+            double dist_back = car_s-other_s;
 
             // Slow down logic
             if (other_s>car_s && other_s-car_s<waypoint_increment && abs(other_d-car_d)<lane_size/2 )
@@ -184,12 +188,51 @@ int main() {
               slow_down = true;
             }
 
-            // TODO lane clerance
-            
+            // Lane clerance update
+            for(int i=0;i<3;++i)
+            {
+              double lane_left_boundary = i*4;
+              double lane_right_boundary = (i+1)*4;
+
+              if(other_d>lane_left_boundary && other_d<lane_right_boundary)
+              {
+                if(dist_front>0 && dist_front<lane_clearance_front[i])
+                  lane_clearance_front[i] = dist_front;
+                if(dist_back>0 && dist_back<lane_clearance_back[i])
+                  lane_clearance_back[i] = dist_back;
+
+              }
+            }
           }
 
+          int lane_int = int((car_d-lane_size/2) / lane_size+0.5);
+          double minimal_distance_to_change = 5;
 
-          // Prepare watpoints in Frenet coordinates 
+          std::cout << "Lane clearance(front): "<< lane_clearance_front[0] << "," <<lane_clearance_front[1]<<","<<lane_clearance_front[2]<<std::endl;
+          std::cout << "Lane clearance(back): "<< lane_clearance_back[0] << "," <<lane_clearance_back[1]<<","<<lane_clearance_back[2]<<std::endl;
+          std::cout << "car_d : "<< car_d <<std::endl;
+          std::cout << "Current lane float : "<< ((car_d-lane_size/2) / lane_size) <<std::endl;
+          std::cout << "Current lane : "<< lane_int <<std::endl;
+          std::cout << "Current lane clearance (front): "<< lane_clearance_front[lane_int] <<std::endl;
+          std::cout << "Current lane clearance (back): "<< lane_clearance_back[lane_int] << std::endl;
+
+          // Lane switching
+          if( lane_clearance_front[lane_int] < lane_clearance_dist )
+          {
+            if(lane-1>=0 && lane_clearance_back[lane_int-1]> lane_clearance_dist && 
+                lane_clearance_front[lane_int-1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
+            {
+              lane -= 1;
+            }else{
+              if(lane+1>=2 && lane_clearance_back[lane_int+1]> lane_clearance_dist && 
+                  lane_clearance_front[lane_int+1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
+              {
+                lane +=1;
+              }
+            }
+          }
+
+          // Prepare waypoints in Frenet coordinates 
           for(int w=0;w<num_waypoints;++w)
           {
             vector<double> waypoint = getXY(car_s+(w+1)*waypoint_increment,(lane_size/2+lane_size*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
