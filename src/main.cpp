@@ -64,10 +64,16 @@ int main() {
       auto s = hasData(data);
 
       if (s != "") {
-        // set variables
+        // set variables & parameters
         iteration++;
         bool debug = 1;
+
+        int num_waypoints  = 3;
+        double waypoint_increment = 30;
+        double lane_size = 4;
+
         double velocity_max = 49.5/2.24;
+        double speed_increment = velocity_max / waypoint_increment;
         double lane = 1; // TODO
         int max_points = 50;
 
@@ -157,11 +163,6 @@ int main() {
             pts_y.push_back(ref_y);
           }
 
-          // Waypoints parameters
-          int num_waypoints  = 3;
-          double waypoint_increment = 30;
-          double lane_size = 4;
-
           // Prepare watpoints in Frenet coordinates 
           for(int w=0;w<num_waypoints;++w)
           {
@@ -211,14 +212,11 @@ int main() {
             current_x += x_increment;
             double y = spline(current_x);
 
-            std::cout << current_x <<","<< y-1128<< std::endl;
-
             // transform back to original coords
             next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
             next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);
           }
 
-          /*
           // Sensor fusion data
           for(int s=0;s<sensor_fusion.size();s++)
           {
@@ -237,9 +235,9 @@ int main() {
 
             if(debug)
             {
-              std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
+              std::cout << "Distance of " << other_id << " (s="<< other_s <<",d="<<other_d<<")is:" << dist << std::endl; 
             }
-          }*/
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
