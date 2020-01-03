@@ -117,6 +117,7 @@ int main() {
             std::cout << "CarD:" << car_d << std::endl; 
             std::cout << "CarYAW:" << car_yaw << std::endl; 
             std::cout << "CarSPEED:" << car_speed << std::endl; 
+            std::cout << "GOT:" << prev_size << std::endl; 
           }
 
           vector<double> pts_x;
@@ -137,14 +138,6 @@ int main() {
 
             pts_y.push_back(prev_car_y);
             pts_y.push_back(car_y);
-
-            if(debug)
-            {
-              //std::cout << "prev_car_x" << prev_car_x << std::endl;
-              //std::cout << "car_x" << car_x << std::endl;
-              //std::cout << "prev_car_y" << prev_car_y << std::endl;
-              //std::cout << "car_y" << car_y << std::endl;
-            }
           }else{
             // Processing consecutive points...
 
@@ -162,15 +155,6 @@ int main() {
 
             pts_y.push_back(ref_y_prev);
             pts_y.push_back(ref_y);
-
-            if(debug)
-            {
-              //std::cout << "ref_x_prev" << ref_x_prev << std::endl;
-              //std::cout << "ref_x" << ref_x << std::endl;
-              //std::cout << "ref_y_prev" << ref_y_prev << std::endl;
-              //std::cout << "ref_y" << ref_y << std::endl;
-            }
-
           }
 
           // Waypoints parameters
@@ -192,13 +176,10 @@ int main() {
             double shift_x = pts_x[p]-ref_x;
             double shift_y = pts_y[p]-ref_y;
 
-            pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
-            pts_y[p] = shift_x*sin(-ref_yaw) - shift_y*cos(-ref_yaw);
+            std::cout << "CHK:" << pts_x[p] <<","<< pts_y[p] << std::endl;
 
-            if(debug)
-            {
-              //std::cout << "pts_x[..]" << pts_x[p]  << std::endl << "pts_y[..]" << pts_y[p] << std::endl;
-            }
+            pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
+            pts_y[p] = shift_x*sin(-ref_yaw) + shift_y*cos(-ref_yaw);
           }
 
           // create a spline and set points
@@ -216,7 +197,7 @@ int main() {
             next_y_vals.push_back(previous_path_y[p]);
           }      
 
-          double target_x = waypoint_increment; // TODO check that
+          double target_x = waypoint_increment;
           double target_y = spline(target_x);
           double target_dist = distance_by_diff(target_x, target_y);
 
@@ -230,9 +211,11 @@ int main() {
             current_x += x_increment;
             double y = spline(current_x);
 
+            std::cout << current_x <<","<< y-1128<< std::endl;
+
             // transform back to original coords
             next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
-            next_y_vals.push_back(current_x*sin(ref_yaw)-y*cos(ref_yaw) + ref_y);
+            next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);
           }
 
           /*
@@ -258,26 +241,12 @@ int main() {
             }
           }*/
 
-          if(debug)
-          {
-            double last_x = 0;
-            double last_y = 0;
-            for (int i=0;i<next_x_vals.size();++i)
-            {
-              std::cout << "\tX[" << i << "]=" << next_x_vals[i] << "(+" << (next_x_vals[i]-last_x)  << "), ";
-              std::cout << "\tY[" << i << "]=" << next_y_vals[i] << "(+" << (next_y_vals[i]-last_y) << "), ";
-
-              last_x = next_x_vals[i];
-              last_y = next_y_vals[i];
-            }
-            std::cout << std::endl;
-          }
-
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
+          DELAY(500);
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }  // end "telemetry" if
       } else {
