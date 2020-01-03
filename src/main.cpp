@@ -74,7 +74,7 @@ int main() {
 
         double speed_conv_ratio = 2.24;
         double velocity_max = 49.5/speed_conv_ratio;
-        double lane = 1; // TODO hanlde lane switching
+        double lane = 1; 
         double frame_time = 0.02;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
@@ -150,6 +150,45 @@ int main() {
             last_speed = distance(ref_x,ref_y, ref_x_prev, ref_y_prev) / frame_time;
           }
 
+         // Sensor fusion data
+          bool slow_down = false;
+          bool clear_lane[3];
+          for(int i=0;i<3;++i)
+          {
+            clear_lane[i] = true;
+          }
+          for(int s=0;s<sensor_fusion.size();s++)
+          {
+            // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
+            double other_id = sensor_fusion[s][0]; // TODO remove not needed values
+            double other_x = sensor_fusion[s][1];
+            double other_y = sensor_fusion[s][2];
+            double other_vx = sensor_fusion[s][3];
+            double other_vy = sensor_fusion[s][4];
+            double other_s = sensor_fusion[s][5];
+            double other_d = sensor_fusion[s][6];
+
+            double dx = car_x - other_x;
+            double dy = car_y - other_y;
+            double dist = sqrt(dx*dx+dy*dy);
+
+            // Slow down logic
+            if (other_s>car_s && other_s-car_s<waypoint_increment && abs(other_d-car_d)<lane_size/2 )
+            {
+              double other_v_magnitude = sqrt(other_vx*other_vx+other_vy*other_vy);
+              if(target_speed>other_v_magnitude)
+              {
+                target_speed = other_v_magnitude;
+              }
+
+              slow_down = true;
+            }
+
+            // TODO lane clerance
+            
+          }
+
+
           // Prepare watpoints in Frenet coordinates 
           for(int w=0;w<num_waypoints;++w)
           {
@@ -186,36 +225,6 @@ int main() {
           double target_x = waypoint_increment;
           double target_y = spline(target_x);
           double target_dist = distance_by_diff(target_x, target_y);
-
-          // Sensor fusion data
-          bool slow_down = false;
-          for(int s=0;s<sensor_fusion.size();s++)
-          {
-            // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
-            double other_id = sensor_fusion[s][0]; // TODO remove not needed values
-            double other_x = sensor_fusion[s][1];
-            double other_y = sensor_fusion[s][2];
-            double other_vx = sensor_fusion[s][3];
-            double other_vy = sensor_fusion[s][4];
-            double other_s = sensor_fusion[s][5];
-            double other_d = sensor_fusion[s][6];
-
-            double dx = car_x - other_x;
-            double dy = car_y - other_y;
-            double dist = sqrt(dx*dx+dy*dy);
-
-            // Slow down logic
-            if (other_s>car_s && other_s-car_s<waypoint_increment && abs(other_d-car_d)<lane_size/2 )
-            {
-              double other_v_magnitude = sqrt(other_vx*other_vx+other_vy*other_vy);
-              if(target_speed>other_v_magnitude)
-              {
-                target_speed = other_v_magnitude;
-              }
-
-              slow_down = true;
-            }
-          }
 
           // Speed up logic
           bool speed_up = true;
