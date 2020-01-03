@@ -70,11 +70,14 @@ int main() {
         int num_waypoints  = 3;
         double waypoint_increment = 30;
         double lane_size = 4;
+        double max_acc = 9; // m/s^2
 
         double speed_conv_ratio = 2.24;
         double velocity_max = 49.5/speed_conv_ratio;
         double lane = 1; // TODO hanlde lane switching
+        double frame_time = 0.02;
         int max_points = 50;
+        double max_v_diff = max_acc * frame_time; // m/s
 
         // parse string
         auto j = json::parse(s);
@@ -90,6 +93,7 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
+          double last_speed = 0;
           double target_speed = car_speed;
 
           // Previous path data given to the Planner
@@ -142,6 +146,8 @@ int main() {
 
             pts_y.push_back(ref_y_prev);
             pts_y.push_back(ref_y);
+
+            last_speed = distance(ref_x,ref_y, ref_x_prev, ref_y_prev) / frame_time;
           }
 
           // Prepare watpoints in Frenet coordinates 
@@ -224,21 +230,55 @@ int main() {
           if(target_speed> velocity_max)
             target_speed = velocity_max;
 
-          // TODO handle jerk!
+          // Handle acceleration and jerk violations
+          double velocity_diff = target_speed-last_speed;
+          double time_diff = frame_time * (max_points-prev_size);
+          double mean_acc = velocity_diff/time_diff;
 
-          // generate more points from spline calculation
+          bool end = false;
           double current_x = 0;
-          double frame_time = 0.02;
-          double N = (target_dist/(frame_time*target_speed));
-          double x_increment = target_x/N;
-          for(int i=1;i<=max_points-prev_size;++i)
+          double desired_frame_increment = target_speed * frame_time;
+          int counter = 0;
+          while(!end)
           {
-            current_x += x_increment;
-            double y = spline(current_x);
+            counter++;
+            // Calculate max & min velocity not to violate acc constraints
+            double v_start = last_speed;
+            double v_max = v_start + max_v_diff;
+            double v_min = v_start - max_v_diff;
+            if (v_min<0)
+              v_min=0;
 
-            // transform back to original coords
-            next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
-            next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);
+            double s_max = v_max * frame_time;
+            double s_min = v_min * frame_time;
+
+            double increment = desired_frame_increment;
+            if(increment>s_max){
+              increment=s_max;
+            } 
+
+            if(increment<s_min){
+              increment=s_min;
+            } 
+
+            last_speed = increment/frame_time;
+
+            current_x += increment;
+
+            if(counter > max_points-prev_size)
+            {
+              end = true;
+              continue;
+            }
+
+            if( current_x > target_dist){
+              end=true;
+            }else{
+              // Add path planning points to output with applying reverse transform of coordinates
+              double y = spline(current_x);
+              next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
+              next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);  
+            }
           }
 
           msgJson["next_x"] = next_x_vals;
@@ -246,7 +286,6 @@ int main() {
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
 
-          DELAY(500);
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }  // end "telemetry" if
       } else {
