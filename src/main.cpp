@@ -7,6 +7,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "spline.h"
 
 // for convenience
 using nlohmann::json;
@@ -66,7 +67,9 @@ int main() {
         // set variables
         iteration++;
         bool debug = 1;
-        double velocity_max = 49.5;
+        double velocity_max = 49.5/2.24;
+        double lane = 1; // TODO
+        int max_points = 50;
 
         // parse string
         auto j = json::parse(s);
@@ -98,10 +101,6 @@ int main() {
 
           json msgJson;
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-          double lane = 1;
-
           /**
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
@@ -110,7 +109,7 @@ int main() {
           // Print debug information
           if( debug )
           {
-            std::cout << std::endl; 
+            std::cout << "=======================================================================================================" << std::endl; 
             std::cout << "Iteration:" << iteration << std::endl; 
             std::cout << "CarX:" << car_x << std::endl; 
             std::cout << "CarY:" << car_y << std::endl; 
@@ -136,8 +135,16 @@ int main() {
             pts_x.push_back(prev_car_x);
             pts_x.push_back(car_x);
 
-            pts_y.push_back(prev_car_x);
             pts_y.push_back(prev_car_y);
+            pts_y.push_back(car_y);
+
+            if(debug)
+            {
+              //std::cout << "prev_car_x" << prev_car_x << std::endl;
+              //std::cout << "car_x" << car_x << std::endl;
+              //std::cout << "prev_car_y" << prev_car_y << std::endl;
+              //std::cout << "car_y" << car_y << std::endl;
+            }
           }else{
             // Processing consecutive points...
 
@@ -147,7 +154,7 @@ int main() {
 
             double ref_x_prev = previous_path_x[prev_size-2];
             double ref_y_prev = previous_path_y[prev_size-2];
-            ref_yaw = atan2(ref_y-ref_y_prev, ref_x = ref_x_prev);
+            ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
 
             // Make first two points tangent to last path
             pts_x.push_back(ref_x_prev);
@@ -156,62 +163,115 @@ int main() {
             pts_y.push_back(ref_y_prev);
             pts_y.push_back(ref_y);
 
-            // Waypoints parameters
-            int num_waypoints  = 3;
-            double waypoint_increment = 30;
-            double lane_size = 4;
-
-            // Prepare watpoints in Frenet coordinates 
-            for(int w=0;w<num_waypoints;++w)
+            if(debug)
             {
-              vector<double> waypoint = getXY(car_s+(w+1)*waypoint_increment,(lane_size/2+lane_size*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-              pts_x.push_back(waypoint[0]);
-              pts_y.push_back(waypoint[1]);
+              //std::cout << "ref_x_prev" << ref_x_prev << std::endl;
+              //std::cout << "ref_x" << ref_x << std::endl;
+              //std::cout << "ref_y_prev" << ref_y_prev << std::endl;
+              //std::cout << "ref_y" << ref_y << std::endl;
             }
 
-            // shift & rotate coordinates
-            for(int p=0; p<pts_x.size();++p)
+          }
+
+          // Waypoints parameters
+          int num_waypoints  = 3;
+          double waypoint_increment = 30;
+          double lane_size = 4;
+
+          // Prepare watpoints in Frenet coordinates 
+          for(int w=0;w<num_waypoints;++w)
+          {
+            vector<double> waypoint = getXY(car_s+(w+1)*waypoint_increment,(lane_size/2+lane_size*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+            pts_x.push_back(waypoint[0]);
+            pts_y.push_back(waypoint[1]);
+          }
+
+          // shift & rotate coordinates
+          for(int p=0; p<pts_x.size();++p)
+          {
+            double shift_x = pts_x[p]-ref_x;
+            double shift_y = pts_y[p]-ref_y;
+
+            pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
+            pts_y[p] = shift_x*sin(-ref_yaw) - shift_y*cos(-ref_yaw);
+
+            if(debug)
             {
-              double shift_x = pts_x[p]-ref_x;
-              double shift_y = pts_y[p]-ref_y;
-
-              pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
-              pts_y[p] = shift_x*sin(-ref_yaw) - shift_y*cos(-ref_yaw);
-
-              if(debug)
-              {
-                std::cout << "pts_x[..]" << pts_x[p]  << std::endl << "pts_y[..]" << pts_y[p] << std::endl;
-              }
-            }
-
-            //
-            
-
-            // Sensor fusion data
-            for(int s=0;s<sensor_fusion.size();s++)
-            {
-              // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
-              double other_id = sensor_fusion[s][0];
-              double other_x = sensor_fusion[s][1];
-              double other_y = sensor_fusion[s][2];
-              double other_vx = sensor_fusion[s][3];
-              double other_vy = sensor_fusion[s][4];
-              double other_s = sensor_fusion[s][5];
-              double other_d = sensor_fusion[s][6];
-
-              double dx = car_x - other_x;
-              double dy = car_y - other_y;
-              double dist = sqrt(dx*dx+dy*dy);
-
-              if(debug)
-              {
-                std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
-              }
+              //std::cout << "pts_x[..]" << pts_x[p]  << std::endl << "pts_y[..]" << pts_y[p] << std::endl;
             }
           }
 
-          next_x_vals = pts_x;
-          next_y_vals = pts_y;
+          // create a spline and set points
+          tk::spline spline;
+          spline.set_points(pts_x, pts_y);
+
+          // points for planner
+          vector<double> next_x_vals;
+          vector<double> next_y_vals;  
+
+          // reuse points from last path
+          for(int p=0;p<prev_size;++p)
+          {
+            next_x_vals.push_back(previous_path_x[p]);
+            next_y_vals.push_back(previous_path_y[p]);
+          }      
+
+          double target_x = waypoint_increment; // TODO check that
+          double target_y = spline(target_x);
+          double target_dist = distance_by_diff(target_x, target_y);
+
+          // generate more points from spline calculation
+          double current_x = 0;
+          double frame_time = 0.02;
+          double N = (target_dist/(frame_time*velocity_max));
+          double x_increment = target_x/N;
+          for(int i=1;i<=max_points-prev_size;++i)
+          {
+            current_x += x_increment;
+            double y = spline(current_x);
+
+            // transform back to original coords
+            next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
+            next_y_vals.push_back(current_x*sin(ref_yaw)-y*cos(ref_yaw) + ref_y);
+          }
+
+          /*
+          // Sensor fusion data
+          for(int s=0;s<sensor_fusion.size();s++)
+          {
+            // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
+            double other_id = sensor_fusion[s][0];
+            double other_x = sensor_fusion[s][1];
+            double other_y = sensor_fusion[s][2];
+            double other_vx = sensor_fusion[s][3];
+            double other_vy = sensor_fusion[s][4];
+            double other_s = sensor_fusion[s][5];
+            double other_d = sensor_fusion[s][6];
+
+            double dx = car_x - other_x;
+            double dy = car_y - other_y;
+            double dist = sqrt(dx*dx+dy*dy);
+
+            if(debug)
+            {
+              std::cout << "Distance of " << other_id << " is:" << dist << std::endl; 
+            }
+          }*/
+
+          if(debug)
+          {
+            double last_x = 0;
+            double last_y = 0;
+            for (int i=0;i<next_x_vals.size();++i)
+            {
+              std::cout << "\tX[" << i << "]=" << next_x_vals[i] << "(+" << (next_x_vals[i]-last_x)  << "), ";
+              std::cout << "\tY[" << i << "]=" << next_y_vals[i] << "(+" << (next_y_vals[i]-last_y) << "), ";
+
+              last_x = next_x_vals[i];
+              last_y = next_y_vals[i];
+            }
+            std::cout << std::endl;
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

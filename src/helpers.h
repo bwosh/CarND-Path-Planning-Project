@@ -39,6 +39,10 @@ double distance(double x1, double y1, double x2, double y2) {
   return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
+inline double distance_by_diff(double x_diff, double y_diff) {
+  return sqrt((x_diff)*(x_diff)+(y_diff)*(y_diff));
+}
+
 // Calculate closest waypoint to current x, y position
 int ClosestWaypoint(double x, double y, const vector<double> &maps_x, 
                     const vector<double> &maps_y) {
