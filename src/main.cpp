@@ -205,13 +205,13 @@ int main() {
             }
           }
 
-          int lane_int = int((car_d-lane_size/2) / lane_size+0.5);
+          int lane_int = int(car_d / lane_size);
           double minimal_distance_to_change = 5;
 
           std::cout << "Lane clearance(front): "<< lane_clearance_front[0] << "," <<lane_clearance_front[1]<<","<<lane_clearance_front[2]<<std::endl;
           std::cout << "Lane clearance(back): "<< lane_clearance_back[0] << "," <<lane_clearance_back[1]<<","<<lane_clearance_back[2]<<std::endl;
           std::cout << "car_d : "<< car_d <<std::endl;
-          std::cout << "Current lane float : "<< ((car_d-lane_size/2) / lane_size) <<std::endl;
+          std::cout << "Current lane float : "<< (car_d-lane_size) <<std::endl;
           std::cout << "Current lane : "<< lane_int <<std::endl;
           std::cout << "Current lane clearance (front): "<< lane_clearance_front[lane_int] <<std::endl;
           std::cout << "Current lane clearance (back): "<< lane_clearance_back[lane_int] << std::endl;
