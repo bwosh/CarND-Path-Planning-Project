@@ -27,7 +27,7 @@ int main() {
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
+  double max_s = 6945.554; // TODO handle cyclic values
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -66,15 +66,14 @@ int main() {
       if (s != "") {
         // set variables & parameters
         iteration++;
-        bool debug = 1;
 
         int num_waypoints  = 3;
         double waypoint_increment = 30;
         double lane_size = 4;
 
-        double velocity_max = 49.5/2.24;
-        double speed_increment = velocity_max / waypoint_increment;
-        double lane = 1; // TODO
+        double speed_conv_ratio = 2.24;
+        double velocity_max = 49.5/speed_conv_ratio;
+        double lane = 1; // TODO hanlde lane switching
         int max_points = 50;
 
         // parse string
@@ -91,6 +90,7 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
+          double target_speed = car_speed;
 
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
@@ -106,25 +106,6 @@ int main() {
           auto sensor_fusion = j[1]["sensor_fusion"];
 
           json msgJson;
-
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
-
-          // Print debug information
-          if( debug )
-          {
-            std::cout << "=======================================================================================================" << std::endl; 
-            std::cout << "Iteration:" << iteration << std::endl; 
-            std::cout << "CarX:" << car_x << std::endl; 
-            std::cout << "CarY:" << car_y << std::endl; 
-            std::cout << "CarS:" << car_s << std::endl; 
-            std::cout << "CarD:" << car_d << std::endl; 
-            std::cout << "CarYAW:" << car_yaw << std::endl; 
-            std::cout << "CarSPEED:" << car_speed << std::endl; 
-            std::cout << "GOT:" << prev_size << std::endl; 
-          }
 
           vector<double> pts_x;
           vector<double> pts_y;
@@ -177,8 +158,6 @@ int main() {
             double shift_x = pts_x[p]-ref_x;
             double shift_y = pts_y[p]-ref_y;
 
-            std::cout << "CHK:" << pts_x[p] <<","<< pts_y[p] << std::endl;
-
             pts_x[p] = shift_x*cos(-ref_yaw) - shift_y*sin(-ref_yaw);
             pts_y[p] = shift_x*sin(-ref_yaw) + shift_y*cos(-ref_yaw);
           }
@@ -202,26 +181,12 @@ int main() {
           double target_y = spline(target_x);
           double target_dist = distance_by_diff(target_x, target_y);
 
-          // generate more points from spline calculation
-          double current_x = 0;
-          double frame_time = 0.02;
-          double N = (target_dist/(frame_time*velocity_max));
-          double x_increment = target_x/N;
-          for(int i=1;i<=max_points-prev_size;++i)
-          {
-            current_x += x_increment;
-            double y = spline(current_x);
-
-            // transform back to original coords
-            next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
-            next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);
-          }
-
           // Sensor fusion data
+          bool slow_down = false;
           for(int s=0;s<sensor_fusion.size();s++)
           {
             // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
-            double other_id = sensor_fusion[s][0];
+            double other_id = sensor_fusion[s][0]; // TODO remove not needed values
             double other_x = sensor_fusion[s][1];
             double other_y = sensor_fusion[s][2];
             double other_vx = sensor_fusion[s][3];
@@ -233,10 +198,47 @@ int main() {
             double dy = car_y - other_y;
             double dist = sqrt(dx*dx+dy*dy);
 
-            if(debug)
+            // Slow down logic
+            if (other_s>car_s && other_s-car_s<waypoint_increment && abs(other_d-car_d)<lane_size/2 )
             {
-              std::cout << "Distance of " << other_id << " (s="<< other_s <<",d="<<other_d<<")is:" << dist << std::endl; 
+              double other_v_magnitude = sqrt(other_vx*other_vx+other_vy*other_vy);
+              if(target_speed>other_v_magnitude)
+              {
+                target_speed = other_v_magnitude;
+              }
+
+              slow_down = true;
             }
+          }
+
+          // Speed up logic
+          bool speed_up = true;
+          if (!slow_down && target_speed<velocity_max)
+          {
+            target_speed = velocity_max;
+          }
+
+          // Velocity constraints checks
+          if(target_speed<0)
+            target_speed = 0;
+          if(target_speed> velocity_max)
+            target_speed = velocity_max;
+
+          // TODO handle jerk!
+
+          // generate more points from spline calculation
+          double current_x = 0;
+          double frame_time = 0.02;
+          double N = (target_dist/(frame_time*target_speed));
+          double x_increment = target_x/N;
+          for(int i=1;i<=max_points-prev_size;++i)
+          {
+            current_x += x_increment;
+            double y = spline(current_x);
+
+            // transform back to original coords
+            next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
+            next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);
           }
 
           msgJson["next_x"] = next_x_vals;
