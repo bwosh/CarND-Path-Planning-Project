@@ -78,7 +78,7 @@ int main() {
         double lane = 1; 
         double frame_time = 0.02;
         double lane_clearance_dist_front = 30;
-        double lane_clearance_dist_back = 5;
+        double lane_clearance_dist_back = 20;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
 
@@ -302,15 +302,19 @@ int main() {
 
           bool end = false;
           double current_x = 0;
-          double current_y = 0;
           double desired_frame_increment = target_speed * frame_time;
           int counter = 0;
+
+          double last_y = spline(0);
+          double last_vy = 0;
+          double last_vx = last_speed;
+
 
           while(!end)
           {
             counter++;
             // Calculate max & min velocity not to violate acc constraints
-            double v_start = last_speed;
+            double v_start = last_vx; 
             double v_max = v_start + max_v_diff;
             double v_min = v_start - max_v_diff;
             if (v_min<0)
@@ -329,7 +333,7 @@ int main() {
               increment=s_min;
             } 
 
-            last_speed = increment/frame_time;
+            last_vx = increment/frame_time;
 
             current_x += increment;
 
@@ -344,6 +348,37 @@ int main() {
             }else{
               // Add path planning points to output with applying reverse transform of coordinates
               double y = spline(current_x);
+
+              double increment_y = y - last_y;
+              double vy = increment_y / frame_time;
+              double accy = (vy-last_vy) / frame_time;
+
+              double v_max = last_vy + max_v_diff;
+              double v_min = last_vy - max_v_diff;
+
+              if (vy<v_min || vy > v_max)
+              {
+                std::cout << "Acc_y:" << accy << " Vy_diff:" << (vy-last_vy) << " MIN:" << v_min << " MAX:" << v_max <<std::endl; 
+                std::cout << "last_y:" << last_y <<std::endl;   
+              }
+              if (vy<v_min)
+              {
+                std::cout << "PRIOR y:" << y << std::endl;
+                increment_y = v_min * frame_time;
+                y = increment_y + last_y;
+                std::cout << "FIXED y:" << (increment_y + last_y) << std::endl;
+              }
+
+              if (vy>v_max)
+              {
+                std::cout << "PRIOR y:" << y << std::endl;
+                increment_y = v_max * frame_time;
+                y = increment_y + last_y;
+                std::cout << "FIXED y:" << (increment_y + last_y) << std::endl;
+              }
+
+              last_y = y;
+
               next_x_vals.push_back(current_x*cos(ref_yaw)-y*sin(ref_yaw) + ref_x);
               next_y_vals.push_back(current_x*sin(ref_yaw)+y*cos(ref_yaw) + ref_y);  
             }
