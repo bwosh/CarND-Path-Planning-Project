@@ -51,6 +51,7 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
   static int iteration = 0;
+  static int targetLane = -1;
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy]
@@ -76,7 +77,8 @@ int main() {
         double velocity_max = 49.5/speed_conv_ratio;
         double lane = 1; 
         double frame_time = 0.02;
-        double lane_clearance_dist = 30;
+        double lane_clearance_dist_front = 30;
+        double lane_clearance_dist_back = 10;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
 
@@ -205,31 +207,48 @@ int main() {
             }
           }
 
+          float lane_float = car_d / lane_size;
           int lane_int = int(car_d / lane_size);
+          lane = lane_int;
           double minimal_distance_to_change = 5;
+          double switch_stop_margin = 0.1; 
 
           std::cout << "Lane clearance(front): "<< lane_clearance_front[0] << "," <<lane_clearance_front[1]<<","<<lane_clearance_front[2]<<std::endl;
           std::cout << "Lane clearance(back): "<< lane_clearance_back[0] << "," <<lane_clearance_back[1]<<","<<lane_clearance_back[2]<<std::endl;
-          std::cout << "car_d : "<< car_d <<std::endl;
-          std::cout << "Current lane float : "<< (car_d-lane_size) <<std::endl;
-          std::cout << "Current lane : "<< lane_int <<std::endl;
-          std::cout << "Current lane clearance (front): "<< lane_clearance_front[lane_int] <<std::endl;
-          std::cout << "Current lane clearance (back): "<< lane_clearance_back[lane_int] << std::endl;
+          std::cout << "Current lane float : "<< lane_float << " ==> " << lane_int << std::endl;
 
-          // Lane switching
-          if( lane_clearance_front[lane_int] < lane_clearance_dist )
-          {
-            if(lane-1>=0 && lane_clearance_back[lane_int-1]> lane_clearance_dist && 
+          // Lane switching start
+          if( targetLane == -1 && lane_clearance_front[lane_int] < lane_clearance_dist_front)
+          { 
+            if(lane-1>=0 && lane_clearance_back[lane_int-1]> lane_clearance_dist_back && 
                 lane_clearance_front[lane_int-1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
             {
-              lane -= 1;
+              targetLane = lane - 1;
             }else{
-              if(lane+1>=2 && lane_clearance_back[lane_int+1]> lane_clearance_dist && 
+              if(lane+1<=2 && lane_clearance_back[lane_int+1]> lane_clearance_dist_back && 
                   lane_clearance_front[lane_int+1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
               {
-                lane +=1;
+                targetLane = lane + 1;
               }
             }
+          }
+
+          // Lane switching end
+          //std::cout << lane_float << " " << targetLane << " " << lane_int << std::endl;
+          if( targetLane !=-1 && lane_int==targetLane)
+          {
+            double diff = lane_float - (double)lane_int;
+
+            if( diff >= 0.5 - switch_stop_margin && diff <= 0.5 + switch_stop_margin)
+            {
+              targetLane = -1;
+            }
+          }
+
+          // Lane swiching continuation
+          if( targetLane !=-1 && targetLane!=lane)
+          {
+            lane = targetLane;
           }
 
           // Prepare waypoints in Frenet coordinates 
@@ -350,6 +369,8 @@ int main() {
 
   h.onConnection([&h](uWS::WebSocket<uWS::SERVER> ws, uWS::HttpRequest req) {
     std::cout << "Connected!!!" << std::endl;
+    targetLane = -1;
+    iteration = 0;
   });
 
   h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
