@@ -74,11 +74,11 @@ int main() {
         double max_acc = 6; // m/s^2
 
         double speed_conv_ratio = 2.24;
-        double velocity_max = 49.5/speed_conv_ratio;
+        double velocity_max = 49/speed_conv_ratio;
         double lane = 1; 
         double frame_time = 0.02;
         double lane_clearance_dist_front = 30;
-        double lane_clearance_dist_back = 10;
+        double lane_clearance_dist_back = 5;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
 
@@ -230,7 +230,6 @@ int main() {
           }
 
           // Lane switching end
-          //std::cout << lane_float << " " << targetLane << " " << lane_int << std::endl;
           if( targetLane !=-1 && lane_int==targetLane)
           {
             double diff = lane_float - (double)lane_int;
@@ -240,7 +239,6 @@ int main() {
               targetLane = -1;
             }
           }
-
           // Lane swiching continuation
           if( targetLane !=-1 && targetLane!=lane)
           {
@@ -340,8 +338,6 @@ int main() {
               end = true;
               continue;
             }
-
-            // TODO handle vy
 
             if( current_x > target_dist){
               end=true;
