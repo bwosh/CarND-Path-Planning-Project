@@ -213,10 +213,6 @@ int main() {
           double minimal_distance_to_change = 5;
           double switch_stop_margin = 0.1; 
 
-          std::cout << "Lane clearance(front): "<< lane_clearance_front[0] << "," <<lane_clearance_front[1]<<","<<lane_clearance_front[2]<<std::endl;
-          std::cout << "Lane clearance(back): "<< lane_clearance_back[0] << "," <<lane_clearance_back[1]<<","<<lane_clearance_back[2]<<std::endl;
-          std::cout << "Current lane float : "<< lane_float << " ==> " << lane_int << std::endl;
-
           // Lane switching start
           if( targetLane == -1 && lane_clearance_front[lane_int] < lane_clearance_dist_front)
           { 
@@ -308,8 +304,10 @@ int main() {
 
           bool end = false;
           double current_x = 0;
+          double current_y = 0;
           double desired_frame_increment = target_speed * frame_time;
           int counter = 0;
+
           while(!end)
           {
             counter++;
@@ -324,6 +322,7 @@ int main() {
             double s_min = v_min * frame_time;
 
             double increment = desired_frame_increment;
+            
             if(increment>s_max){
               increment=s_max;
             } 
@@ -341,6 +340,8 @@ int main() {
               end = true;
               continue;
             }
+
+            // TODO handle vy
 
             if( current_x > target_dist){
               end=true;
