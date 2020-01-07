@@ -9,7 +9,7 @@ The goal of the project is to navigate car car in highway traffic to:
 - plan path not to accelerate/decelerate too much (max 10 m/s^2)
 - plan path not to jerk too moch (max 10 m/s^3)
 - not to have colissions with other cars
-- to change ;anes whe it's reasonable
+- to change lanes whe it's reasonable
    
 
 ### Simulator.
@@ -29,12 +29,12 @@ To build the code that communicate with the simulator:
 
 ## Input data
 The data from telementry contained:
--Car's x position on the map
--Car's y position on the map
--Car's s position in Frenet coordinates
--Car's d position in Frenet coordinates
--Car't yaw rate
--Car's speed magnitude
+- Car's x position on the map
+- Car's y position on the map
+- Car's s position in Frenet coordinates
+- Car's d position in Frenet coordinates
+- Car't yaw rate
+- Car's speed magnitude
 
 
 ## Path creation 
