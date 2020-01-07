@@ -27,7 +27,7 @@ int main() {
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554; // TODO handle cyclic values
+  static double max_s = 6945.554; 
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -81,6 +81,8 @@ int main() {
         double lane_clearance_dist_back = 20;
         int max_points = 50;
         double max_v_diff = max_acc * frame_time; // m/s
+        double minimal_distance_to_change = 1;
+        double switch_stop_margin = 0.1; 
 
         // parse string
         auto j = json::parse(s);
@@ -165,13 +167,30 @@ int main() {
           for(int s=0;s<sensor_fusion.size();s++)
           {
             // Order of sensor fusion data is [ id, x, y, vx, vy, s, d]
-            double other_id = sensor_fusion[s][0]; // TODO remove not needed values
+            double other_id = sensor_fusion[s][0];
             double other_x = sensor_fusion[s][1];
             double other_y = sensor_fusion[s][2];
             double other_vx = sensor_fusion[s][3];
             double other_vy = sensor_fusion[s][4];
             double other_s = sensor_fusion[s][5];
             double other_d = sensor_fusion[s][6];
+
+            // Fix cyclic issues (max s)
+            double fix_margin = max_s/6;
+            if (car_s > max_s - fix_margin)
+            {
+              if (other_s< fix_margin)
+              {
+                other_s += max_s;
+              }
+            }
+            if(car_s<fix_margin)
+            {
+              if (other_s> max_s - fix_margin)
+              {
+                other_s -= max_s;
+              }            
+            }
 
             double dx = car_x - other_x;
             double dy = car_y - other_y;
@@ -210,21 +229,19 @@ int main() {
           float lane_float = car_d / lane_size;
           int lane_int = int(car_d / lane_size);
           lane = lane_int;
-          double minimal_distance_to_change = 5;
-          double switch_stop_margin = 0.1; 
 
           // Lane switching start
           if( targetLane == -1 && lane_clearance_front[lane_int] < lane_clearance_dist_front)
           { 
-            if(lane-1>=0 && lane_clearance_back[lane_int-1]> lane_clearance_dist_back && 
-                lane_clearance_front[lane_int-1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
+            if(lane+1<=2 && lane_clearance_back[lane_int+1]> lane_clearance_dist_back && 
+                lane_clearance_front[lane_int+1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
             {
-              targetLane = lane - 1;
+              targetLane = lane + 1;
             }else{
-              if(lane+1<=2 && lane_clearance_back[lane_int+1]> lane_clearance_dist_back && 
-                  lane_clearance_front[lane_int+1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
+              if(lane-1>=0 && lane_clearance_back[lane_int-1]> lane_clearance_dist_back && 
+                  lane_clearance_front[lane_int-1]>lane_clearance_front[lane_int]+minimal_distance_to_change)
               {
-                targetLane = lane + 1;
+                targetLane = lane - 1;
               }
             }
           }
@@ -349,6 +366,7 @@ int main() {
               // Add path planning points to output with applying reverse transform of coordinates
               double y = spline(current_x);
 
+              // Fix acceleration constraints if needed
               double increment_y = y - last_y;
               double vy = increment_y / frame_time;
               double accy = (vy-last_vy) / frame_time;
@@ -356,25 +374,16 @@ int main() {
               double v_max = last_vy + max_v_diff;
               double v_min = last_vy - max_v_diff;
 
-              if (vy<v_min || vy > v_max)
-              {
-                std::cout << "Acc_y:" << accy << " Vy_diff:" << (vy-last_vy) << " MIN:" << v_min << " MAX:" << v_max <<std::endl; 
-                std::cout << "last_y:" << last_y <<std::endl;   
-              }
               if (vy<v_min)
               {
-                std::cout << "PRIOR y:" << y << std::endl;
                 increment_y = v_min * frame_time;
                 y = increment_y + last_y;
-                std::cout << "FIXED y:" << (increment_y + last_y) << std::endl;
               }
 
               if (vy>v_max)
               {
-                std::cout << "PRIOR y:" << y << std::endl;
                 increment_y = v_max * frame_time;
                 y = increment_y + last_y;
-                std::cout << "FIXED y:" << (increment_y + last_y) << std::endl;
               }
 
               last_y = y;
